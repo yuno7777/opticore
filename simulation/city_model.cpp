@@ -99,7 +99,9 @@ Scenario generate_city_scenario(const CitySpec& spec) {
   if (spec.capacity > 0) {
     sc.capacity = spec.capacity;
   } else {
-    const double loaded = total_demand * 0.9 / static_cast<double>(K);
+    // 20% slack over the mean load per vehicle: keeps auto-capacity fleets
+    // reasonably feasible while forcing non-trivial packing.
+    const double loaded = total_demand * 1.2 / static_cast<double>(K);
     const int cap = static_cast<int>(std::ceil(loaded));
     int max_single = 0;
     for (int i = 1; i < n; ++i)

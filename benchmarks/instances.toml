@@ -1,0 +1,31 @@
+# OptiCore benchmark instances.
+# Deterministic synthetic scenarios generated via `opticore gen` with the
+# recorded parameters. Instance files are committed; the harness never
+# regenerates an existing file, so runs are reproducible.
+
+[[instances]]
+name = "tiny-8"
+seed = 7
+customers = 8
+clusters = 3
+vehicles = 3
+cpu_budget_s = 5.0
+ortools_budget_s = 5.0
+
+[[instances]]
+name = "small-20"
+seed = 101
+customers = 20
+clusters = 4
+vehicles = 5
+cpu_budget_s = 15.0
+ortools_budget_s = 15.0
+
+[[instances]]
+name = "medium-50"
+seed = 202
+customers = 50
+clusters = 5
+vehicles = 10
+cpu_budget_s = 30.0
+ortools_budget_s = 30.0

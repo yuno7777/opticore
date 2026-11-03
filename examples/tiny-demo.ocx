@@ -5,7 +5,7 @@ time_window_mode hard
 travel_model synthetic-clustered-euclidean
 vehicle_start_time 0
 vehicle_count 3
-capacity 15
+capacity 20
 max_route_duration -1
 weight_travel_time 1
 weight_travel_dist 0

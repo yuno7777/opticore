@@ -1,0 +1,21 @@
+# opticore solution v1
+scenario tiny-demo
+solver ortools-9.15
+seed 7
+status feasible
+BEGIN_ROUTES
+vehicle 0 0 5 6 7 0
+vehicle 1 0 1 0
+vehicle 2 0 3 8 4 0
+END_ROUTES
+BEGIN_UNSERVED
+2 dropped by OR-Tools (penalized disjunction)
+END_UNSERVED
+BEGIN_OBJECTIVE
+travel_time_min 103.338
+travel_dist_km 51.669
+vehicles_used 3
+total_lateness_min 0.000
+unserved_count 1
+total_cost 10403.338
+END_OBJECTIVE

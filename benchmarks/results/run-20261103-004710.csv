@@ -1,0 +1,7 @@
+instance,solver,status,wall_s,total_cost,travel_time_min,travel_dist_km,vehicles_used,lateness_min,served,unserved,validation,violations,gap_pct
+tiny-8,chronos-cpu,feasible,0.046,412.42,112.42,56.21,3,0.0,8,0,ok,0,
+tiny-8,ortools-9.15,feasible,5.151,412.42,112.42,56.21,3,0.0,8,0,ok,0,
+small-20,chronos-cpu,feasible,0.194,631.426,131.426,65.713,5,0.0,20,0,ok,0,
+small-20,ortools-9.15,feasible,15.206,631.426,131.426,65.713,5,0.0,20,0,ok,0,
+medium-50,chronos-cpu,feasible,1.25,1127.684,227.684,113.842,9,0.0,50,0,ok,0,
+medium-50,ortools-9.15,feasible,30.18,1124.33,224.33,112.165,9,0.0,50,0,ok,0,
