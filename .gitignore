@@ -1,0 +1,10 @@
+build/
+build-*/
+out/
+cmake-build-*/
+__pycache__/
+*.pyc
+.vs/
+.vscode/
+.cache/
+*.exe.obj

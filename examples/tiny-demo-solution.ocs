@@ -1,0 +1,21 @@
+# opticore solution v1
+scenario tiny-demo
+solver chronos-cpu
+seed 7
+status feasible
+BEGIN_ROUTES
+vehicle 0 0 6 7 3 0
+vehicle 1 0 4 8 0
+vehicle 2 0 5 1 0
+END_ROUTES
+BEGIN_UNSERVED
+2 fleet limit exceeded during savings construction
+END_UNSERVED
+BEGIN_OBJECTIVE
+travel_time_min 103.488
+travel_dist_km 51.744
+vehicles_used 3
+total_lateness_min 0.000
+unserved_count 1
+total_cost 10403.487999999999
+END_OBJECTIVE
