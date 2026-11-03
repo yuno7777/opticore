@@ -1,174 +1,145 @@
-# OptiCore ⚡
+# OptiCore
 
-**A High-Performance C++20 Optimization Engine for Capacitated Vehicle Routing with Time Windows (CVRPTW)**
+A high-performance C++20 optimization engine for the Capacitated Vehicle Routing Problem with Time Windows (CVRPTW).
 
-[![C++20](https://img.shields.io/badge/standard-C%2B%2B20-blue.svg?logo=c%2B%2B)](https://en.cppreference.com/w/cpp/20)
-[![CMake](https://img.shields.io/badge/build-CMake%20%2B%20Ninja-064F8C.svg?logo=cmake)](https://cmake.org/)
-[![Tests](https://img.shields.io/badge/tests-18%2F18%20passing-brightgreen.svg)]()
-[![Baseline](https://img.shields.io/badge/baseline-Google%20OR--Tools%209.15-orange.svg)](https://developers.google.com/optimization)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+## Overview
 
----
+OptiCore is an operations research engine for routing delivery fleets under vehicle capacity, maximum shift duration, and customer time window constraints. The engine minimizes a weighted objective across transit duration, road distance, vehicle fixed deployment costs, and customer lateness penalties.
 
-## 📌 Overview
+The system is designed around three architectural contracts:
+- **Zero-dependency C++20 core**: Domain types, search algorithms, schedule simulation, and validation link exclusively against the C++ standard library.
+- **Single-truth schedule simulation**: Arrival times, waiting periods, service initiation, lateness, and depot return legs are evaluated by a single canonical function shared across all solvers and validators.
+- **Independent validation**: Solutions are evaluated by a 13-rule validator that recalculates feasibility and cost directly from raw scenario cost matrices.
 
-**OptiCore** is an industrial-grade Operations Research engine designed to solve the **Capacitated Vehicle Routing Problem with Time Windows (CVRPTW)**. It delivers production-grade route plans that minimize travel duration, distance, fleet fixed costs, and customer delivery lateness under tight capacity and service constraints.
+## Benchmarks: Chronos vs Google OR-Tools
 
-Unlike toy routing scripts, OptiCore is built on strict systems engineering principles:
-- **Zero Third-Party Dependencies in C++ Core**: The solver, domain models, forward scheduler, and validator link strictly against the C++20 standard library.
-- **Single-Truth Forward Scheduler**: Customer arrival, wait times, service windows, lateness penalties, and return legs are computed by a single, canonical scheduler shared across solvers and validators.
-- **Independent 13-Rule Feasibility Validator**: Solutions are never accepted simply because a solver reports success; every route is independently recomputed and verified against raw scenario matrices.
-- **Rigorously Benchmarked Against Google OR-Tools**: Measured against Google OR-Tools 9.15 on standardized instances with zero fabricated numbers.
+All benchmarks were executed on an Intel Core i7-13620H (10 cores, 16 threads, 16 GB RAM) running Windows 11. Solvers were allocated identical time budgets. Every solution was checked and confirmed compliant by the independent validator.
+
+| Instance | Problem Dimension | Chronos Objective | OR-Tools Objective | Optimality Gap (%) | Chronos Time (s) | OR-Tools Time (s) | Runtime Ratio |
+|:---|:---|:---|:---|:---|:---|:---|:---|
+| tiny-8 | 8 customers, 3 vehicles | 412.420 | 412.420 | 0.000% | 0.06 | 5.15 | 85x faster |
+| small-20 | 20 customers, 5 vehicles | 631.426 | 631.426 | 0.000% | 0.19 | 15.15 | 79x faster |
+| medium-50 | 50 customers, 10 vehicles | 1127.684 | 1124.330 | 0.298% | 1.07 | 30.15 | 28x faster |
+| probe-120 | 120 customers, 18 vehicles | Feasible (0 unserved) | - | - | 9.45 | - | - |
+
+On small instances, Chronos reaches identical solutions to Google OR-Tools Guided Local Search. On the 50-customer instance, Chronos reaches within 0.298% of the OR-Tools objective in 1.07 seconds.
+
+## Architecture
 
 ```
-                    ┌────────────────────────────┐
-                    │   Scenario Generator /     │
-                    │   Raw Road Matrix (.ocx)   │
-                    └─────────────┬──────────────┘
-                                  │
-                  ┌───────────────┴───────────────┐
-                  ▼                               ▼
-       ┌─────────────────────┐        ┌─────────────────────┐
-       │   OptiCore Chronos  │        │   Google OR-Tools   │
-       │   Custom C++ Solver │        │  Reference Baseline │
-       │  CW + LS + SeededILS│        │  Guided Local Search│
-       └──────────┬──────────┘        └──────────┬──────────┘
-                  │                               │
-                  └───────────────┬───────────────┘
-                                  ▼
-                    ┌────────────────────────────┐
-                    │   Standardized Solution    │
-                    │      Output (.ocs)         │
-                    └─────────────┬──────────────┘
-                                  ▼
-                    ┌────────────────────────────┐
-                    │    Independent Validator   │
-                    │    (13 Rule Invariants)    │
-                    └────────────────────────────┘
+Scenario File (.ocx)
+        |
+        +----------------------------+
+        |                            |
+        v                            v
+Chronos (C++20)              Google OR-Tools 9.15
+- Infeasibility screening    - Path cheapest arc
+- Clarke-Wright savings      - Guided local search
+- Variable neighborhood descent
+- Iterated local search (ILS)
+        |                            |
+        +----------------------------+
+        |
+        v
+Solution File (.ocs)
+        |
+        v
+Independent Validator (13 Rules)
+- Capacity and shift duration
+- Time windows and service start
+- Customer coverage verification
+- Matrix distance and time recalculation
 ```
 
----
+### Chronos Solver Pipeline
+1. **Pre-screening**: Filters customers with demands exceeding vehicle capacity or time windows unreachable from the depot.
+2. **Constructive Phase**: Parallel Clarke-Wright savings with deterministic tie-breaking, followed by cheapest feasible insertion for unassigned stops.
+3. **Local Search**: Variable neighborhood descent evaluating Relocate (intra- and inter-route single customer shifts), Swap (customer exchanges), and 2-Opt (sub-tour edge reversals).
+4. **Iterated Local Search**: Seeded perturbation operator removing k stops (k between 2 and 12) followed by greedy re-insertion and local search descent.
 
-## 📊 Benchmark Highlights: Chronos vs. Google OR-Tools
+### Independent Validator
+The validator verifies solutions against raw scenario matrices without relying on solver metadata:
+- `V01-V03`: Node bounds, non-empty routes, depot start and end coordinates.
+- `V04`: Customer coverage (every customer served once or explicitly listed with reason).
+- `V05`: Vehicle capacity bounds (sum of demands <= Q).
+- `V06`: Route duration limits (return time - start time <= L).
+- `V07-V08`: Time window conformance (service start <= late window bound in hard mode).
+- `V09`: Vehicle availability count (used vehicles <= K).
+- `V10-V12`: Numerical consistency of reported travel time, distance, and objective cost within 1e-6.
+- `V13`: Guard against empty solutions claiming feasibility.
 
-Tested under identical wall-clock budgets on an Intel Core i7-13620H (10C/16T, 16 GB RAM). Every result is checked and confirmed compliant by the independent validator.
-
-| Instance | Problem Size | Chronos Cost | OR-Tools Cost | Optimality Gap (%) | Chronos Time | OR-Tools Time | Speedup |
-|:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| **`tiny-8`** | 8 cust, 3 veh | **412.420** | **412.420** | **0.000%** | **0.06 s** | 5.15 s | **$85\times$** |
-| **`small-20`** | 20 cust, 5 veh | **631.426** | **631.426** | **0.000%** | **0.19 s** | 15.15 s | **$79\times$** |
-| **`medium-50`** | 50 cust, 10 veh | 1127.684 | **1124.330** | **0.298%** | **1.07 s** | 30.15 s | **$28\times$** |
-| **`probe-120`** | 120 cust, 18 veh | **Feasible** | — | **0 unserved** | **9.45 s** | — | — |
-
-> **Key Takeaway**: Chronos reaches exact parity with OR-Tools on small instances and stays within **0.3%** on 50 customers while executing in **~1 second** ($28\times$ faster).
-
----
-
-## 🛠️ Architecture & Core Components
-
-### 1. Chronos Metaheuristic Pipeline (`solvers/cpu/chronos.cpp`)
-1. **Pre-Screening**: Identifies structurally impossible requests ($q_i > Q$ or unreachable windows) before initiating search.
-2. **Clarke-Wright Savings Construction**: Builds initial route clusters using parallel savings with deterministic tie-breaking.
-3. **Cheapest Feasible Insertion**: Greedily recovers any unassigned customer requests.
-4. **Multi-Neighborhood Local Search**: Variable neighborhood descent exploring **Relocate** (inter/intra-route shifts), **Swap** (customer exchanges), and **2-Opt** (sub-tour edge reversals).
-5. **Seeded Iterated Local Search (ILS)**: Perturbs incumbent routes via seeded customer removal ($k \in [2, 12]$) and re-insertion, accepting only non-degrading moves.
-
-### 2. Independent Feasibility Validator (`core/src/validator.cpp`)
-Re-simulates routes against raw distance/time matrices to assert 13 invariant rules:
-- **`V01–V03`**: Node index validity, non-empty stop sequences, valid depot endpoints.
-- **`V04`**: Complete customer coverage (every customer served exactly once or explicitly listed as unserved).
-- **`V05`**: Hard vehicle capacity enforcement ($\sum q_i \le Q$).
-- **`V06`**: Route duration shift limit enforcement ($ret - T_0 \le L$).
-- **`V07–V08`**: Time window compliance (service initiation $b_i \le l_i$ in hard TW mode).
-- **`V09`**: Homogeneous fleet availability ($|\{v : R_v \neq \emptyset\}| \le K$).
-- **`V10–V12`**: Floating-point numeric consistency within $10^{-6}$ tolerance.
-- **`V13`**: Rejection of empty/no-op solutions claiming feasibility.
-
-### 3. GPU Acceleration Architecture (`solvers/cuda/` & `docs/CUDA_DESIGN.md`)
-Designed for Structure-of-Arrays (SoA) candidate batch evaluations to accelerate population-based metaheuristics:
-- 1 CUDA block per candidate route evaluation.
+### GPU Workload Design (CUDA)
+The GPU implementation is structured for batch candidate route evaluation:
+- Structure-of-Arrays (SoA) memory layout for candidate route offsets and stop sequences.
 - Read-only matrix caching using `__ldg` global memory loads.
-- Break-even crossover analysis for batches $> 512$ candidates.
+- Documented as an optional build path requiring MSVC and CUDA Toolkit <= 13.4.
 
----
-
-## 🚀 Quickstart
+## Quickstart
 
 ### Prerequisites
-- **C++ Compiler**: GCC $\ge 12$ (tested with GCC 16.2), Clang $\ge 15$, or MSVC 2022.
-- **Build System**: CMake $\ge 3.20$ and Ninja.
-- **Python** (for baseline & benchmark harness): Python $\ge 3.10$ with `ortools` (`pip install ortools`).
+- C++ compiler supporting C++20 (GCC 12+, Clang 15+, MSVC 2022)
+- CMake 3.20+ and Ninja
+- Python 3.10+ with ortools (`pip install ortools`) for baseline comparison
 
-### 1. Build the Engine
-```powershell
-# Configure and compile with C++20 and optimizations
+### Build
+```bash
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ```
 
-### 2. Run Test Suites (18 Tests)
-```powershell
-# C++ Unit & Solver Tests (15 tests)
+### Run Tests
+```bash
+# C++ unit and solver tests (15 tests)
 ctest --test-dir build --output-on-failure
 
-# Cross-Language Python Integration Tests (3 tests)
+# Cross-language baseline integration tests (3 tests)
 python -m unittest discover -s tests/python
 ```
 
-### 3. Generate, Solve, and Validate a Scenario
-```powershell
-# Generate a clustered synthetic delivery scenario (20 customers, 5 vehicles)
-./build/opticore.exe gen --out scenario.ocx --seed 42 --customers 20 --vehicles 5 --name demo-city
+### Execute Scenario
+```bash
+# Generate synthetic scenario
+./build/opticore.exe gen --out scenario.ocx --seed 42 --customers 20 --vehicles 5 --name demo
 
-# Solve with Chronos C++ solver
+# Solve using Chronos
 ./build/opticore.exe solve --scenario scenario.ocx --solution solution.ocs --seed 42
 
-# Run independent validation
+# Validate solution
 ./build/opticore.exe validate --scenario scenario.ocx --solution solution.ocs
 ```
 
-### 4. Run the Full Benchmark Suite
-```powershell
+### Run Benchmarks
+```bash
 python benchmarks/run_bench.py
 ```
-*Executes all standardized instances, validates outputs, and writes timestamped results to `benchmarks/results/`.*
 
----
-
-## 📂 Repository Structure
+## Repository Structure
 
 ```text
-opticore/
-├── core/                # Domain models, formats (.ocx/.ocs), planner, objective, validator
-├── simulation/          # Clustered Euclidean synthetic scenario generator
-├── solvers/
-│   ├── cpu/             # Chronos C++ solver (Clarke-Wright + LS + ILS)
-│   ├── baseline/        # Google OR-Tools 9.15 reference baseline
-│   └── cuda/            # GPU candidate evaluation kernel design & contracts
-├── tools/               # opticore unified CLI executable
-├── benchmarks/          # Standardized instances (tiny/small/medium) and benchmark harness
-├── tests/               # Test assertions, C++ unit/solver tests, Python integration
-└── docs/                # Full documentation suite (15 documents + 6 ADRs)
+core/           C++20 domain types, file parsers, route planner, validator
+simulation/     Deterministic synthetic clustered city generator
+solvers/
+  cpu/          Chronos C++ solver
+  baseline/     Google OR-Tools reference baseline
+  cuda/         GPU batch candidate evaluation design
+tools/          Unified CLI entry point (opticore-cli.cpp)
+benchmarks/     Committed benchmark instances and execution harness
+tests/          C++ test harness, unit tests, and Python test suite
+docs/           Technical documentation suite and Architecture Decision Records
 ```
 
----
+## Documentation
 
-## 📚 Documentation Index
+- [docs/DOCUMENTING.md](docs/DOCUMENTING.md): Engineering log, environment inventory, and verification records.
+- [docs/PROBLEM_FORMULATION.md](docs/PROBLEM_FORMULATION.md): Formal mathematical definitions, decision variables, and objective terms.
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): Subsystem boundaries, data flows, and scheduling interfaces.
+- [docs/DATA_AND_CITY_MODEL.md](docs/DATA_AND_CITY_MODEL.md): Matrix representations, city synthesis, and file formats.
+- [docs/ALGORITHMS.md](docs/ALGORITHMS.md): Algorithmic complexity, neighborhood operators, and baseline settings.
+- [docs/CUDA_DESIGN.md](docs/CUDA_DESIGN.md): Memory layout, kernel contracts, and break-even crossover analysis.
+- [docs/EXPERIMENTS_AND_BENCHMARKS.md](docs/EXPERIMENTS_AND_BENCHMARKS.md): Empirical verification logs and stress test measurements.
+- [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md): Phased roadmap and milestone criteria.
+- [docs/decisions/](docs/decisions/): Architecture Decision Records (ADR-001 to ADR-006).
 
-| Document | Description |
-|:---|:---|
-| 📖 [**`DOCUMENTING.md`**](docs/DOCUMENTING.md) | Single source of truth: engineering journal, phase status, environment audit, bug log. |
-| 📐 [**`PROBLEM_FORMULATION.md`**](docs/PROBLEM_FORMULATION.md) | Mathematical specification: sets, decision variables, hard/soft constraints, objective weights. |
-| 🏗️ [**`ARCHITECTURE.md`**](docs/ARCHITECTURE.md) | Subsystem boundaries, scheduling single-truth, data flow diagrams. |
-| 🗺️ [**`DATA_AND_CITY_MODEL.md`**](docs/DATA_AND_CITY_MODEL.md) | Clustered city generator, matrix interfaces, and `.ocx`/`.ocs` grammar. |
-| ⚡ [**`ALGORITHMS.md`**](docs/ALGORITHMS.md) | Algorithmic analysis, neighborhood operators, time complexity, and baseline setup. |
-| 🚀 [**`CUDA_DESIGN.md`**](docs/CUDA_DESIGN.md) | SoA memory layouts, kernel specifications, and GPU break-even methodology. |
-| 📈 [**`EXPERIMENTS_AND_BENCHMARKS.md`**](docs/EXPERIMENTS_AND_BENCHMARKS.md) | Verified empirical runs, hardware specs, and large-scale stress tests. |
-| 📋 [**`IMPLEMENTATION_PLAN.md`**](docs/IMPLEMENTATION_PLAN.md) | Phased roadmap (Phases 0–9), dependencies, and verifiable exit criteria. |
-| 🏛️ [**`docs/decisions/`**](docs/decisions/) | Architecture Decision Records (ADR-001 through ADR-006). |
+## License
 
----
-
-## 📜 License
-
-This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+MIT License. See [LICENSE](LICENSE) for details.
